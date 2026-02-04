@@ -19,3 +19,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Resource scope validation
 - SCIM error response helpers
 - Initial test suite
+
+### ex_scim_client
+#### Added
+- HTTP client for consuming SCIM APIs
+- User and Group resource operations
+- Request builder with authentication
+
+### ex_scim_ecto
+#### Added
+- Ecto-based storage adapter
+- Query filter adapter for Ecto integration
+
+### ex_scim_phoenix
+#### Added
+- Phoenix integration for SCIM
+- SCIM controllers and routing
+- Authentication plugs and middleware
+- Request logging
+- Error handling improvements
+
+### examples/provider
+#### Added
+- LiveView-based provider example
+- User and group management interface
+- Database migrations and seeds
+- Authentication integration
