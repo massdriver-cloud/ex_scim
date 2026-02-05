@@ -33,28 +33,26 @@ defmodule ExScim.Auth.Principal do
   ## Examples
 
       iex> Principal.new(%{id: "user_1", scopes: ["scim:read"]})
-      %Principal{id: "user_1", scopes: ["scim:read"], metadata: %{}}
+      {:ok, %Principal{id: "user_1", scopes: ["scim:read"], metadata: %{}}}
 
       iex> Principal.new(id: "client_1", scopes: ["scim:read", "scim:write"], metadata: %{grant_type: "client_credentials"})
-      %Principal{id: "client_1", scopes: ["scim:read", "scim:write"], metadata: %{grant_type: "client_credentials"}}
+      {:ok, %Principal{id: "client_1", scopes: ["scim:read", "scim:write"], metadata: %{grant_type: "client_credentials"}}}
   """
-  @spec new(map() | keyword()) :: t()
+  @spec new(map() | keyword()) :: {:ok, t()} | :error
   def new(attrs) when is_list(attrs), do: new(Map.new(attrs))
 
   def new(%{id: id, scopes: scopes} = attrs) when is_binary(id) and is_list(scopes) do
-    %__MODULE__{
-      id: id,
-      scopes: scopes,
-      username: Map.get(attrs, :username),
-      display_name: Map.get(attrs, :display_name),
-      metadata: Map.get(attrs, :metadata, %{})
-    }
+    {:ok,
+     %__MODULE__{
+       id: id,
+       scopes: scopes,
+       username: Map.get(attrs, :username),
+       display_name: Map.get(attrs, :display_name),
+       metadata: Map.get(attrs, :metadata, %{})
+     }}
   end
 
-  def new(attrs) when is_map(attrs) do
-    raise ArgumentError,
-          "Principal requires :id (string) and :scopes (list), got: #{inspect(Map.keys(attrs))}"
-  end
+  def new(attrs) when is_map(attrs), do: :error
 
   @doc """
   Returns `true` if the principal has the given scope.
@@ -68,7 +66,8 @@ defmodule ExScim.Auth.Principal do
   Returns `true` if the principal has all of the given scopes.
   """
   @spec has_all_scopes?(t(), [String.t()]) :: boolean()
-  def has_all_scopes?(%__MODULE__{scopes: scopes}, required_scopes) when is_list(required_scopes) do
+  def has_all_scopes?(%__MODULE__{scopes: scopes}, required_scopes)
+      when is_list(required_scopes) do
     Enum.all?(required_scopes, &(&1 in scopes))
   end
 end

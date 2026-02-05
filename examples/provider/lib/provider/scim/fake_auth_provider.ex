@@ -78,7 +78,7 @@ defmodule Provider.Scim.FakeAuthProvider do
     case Map.get(fake_tokens(), token) do
       %{active: true, expires_at: exp} = data ->
         if DateTime.compare(DateTime.utc_now(), exp) == :lt do
-          {:ok, Principal.new(data)}
+          Principal.new(data)
         else
           {:error, :expired_token}
         end
@@ -98,7 +98,7 @@ defmodule Provider.Scim.FakeAuthProvider do
         {:error, :invalid_credentials}
 
       data ->
-        {:ok, Principal.new(Map.put(data, :username, username))}
+        Principal.new(Map.put(data, :username, username))
     end
   end
 end
