@@ -16,6 +16,12 @@ defmodule ExScimEcto.StorageAdapter do
         user_model: {MyApp.Accounts.User, preload: [:roles, :organizations]},
         group_model: {MyApp.Groups.Group, preload: [:members]}
 
+  To configure a custom lookup key (defaults to `:id`):
+
+      config :ex_scim,
+        user_model: {MyApp.Accounts.User, lookup_key: :resource_id},
+        group_model: {MyApp.Groups.Group, preload: [:members], lookup_key: :uuid}
+
   """
 
   @behaviour ExScim.Storage.Adapter
@@ -24,15 +30,8 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def get_user(id) do
-    {user_schema, associations} = user_schema()
-
-    user_schema
-    |> repo().get(id)
-    |> maybe_preload(repo(), associations)
-    |> case do
-      nil -> {:error, :not_found}
-      user -> {:ok, user}
-    end
+    {_schema, _associations, lookup_key} = user_schema()
+    get_resource_by(&user_schema/0, lookup_key, id)
   end
 
   @impl true
@@ -47,7 +46,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def list_users(filter_ast, sort_opts, pagination_opts) do
-    {user_schema, associations} = user_schema()
+    {user_schema, associations, _lookup_key} = user_schema()
 
     query =
       from(u in user_schema)
@@ -77,7 +76,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   def create_user(domain_user) when is_map(domain_user) do
     # Domain user struct is already validated by Users context
-    {user_schema, associations} = user_schema()
+    {user_schema, associations, _lookup_key} = user_schema()
 
     changeset =
       user_schema.changeset(user_schema.__struct__(), domain_user)
@@ -89,7 +88,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def update_user(id, domain_user) do
-    {user_schema, associations} = user_schema()
+    {user_schema, associations, _lookup_key} = user_schema()
 
     with {:ok, existing} <- get_user(id) do
       attrs =
@@ -108,7 +107,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def replace_user(id, domain_user) do
-    {user_schema, _preloads} = user_schema()
+    {user_schema, _preloads, _lookup_key} = user_schema()
 
     with {:ok, existing} <- get_user(id) do
       changeset = user_schema.changeset(existing, Map.from_struct(domain_user))
@@ -132,19 +131,15 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def user_exists?(id) do
-    {user_schema, _preloads} = user_schema()
-    repo().get(user_schema, id) != nil
+    {user_schema, _preloads, lookup_key} = user_schema()
+    repo().get_by(user_schema, [{lookup_key, id}]) != nil
   end
 
   # Group operations
   @impl true
   def get_group(id) do
-    {group_schema, _preloads} = group_schema()
-
-    case repo().get(group_schema, id) do
-      nil -> {:error, :not_found}
-      group -> {:ok, group}
-    end
+    {_schema, _associations, lookup_key} = group_schema()
+    get_resource_by(&group_schema/0, lookup_key, id)
   end
 
   @impl true
@@ -159,7 +154,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def list_groups(filter_ast, sort_opts, pagination_opts) do
-    {group_schema, associations} = group_schema()
+    {group_schema, associations, _lookup_key} = group_schema()
 
     query =
       from(g in group_schema)
@@ -188,7 +183,7 @@ defmodule ExScimEcto.StorageAdapter do
   end
 
   def create_group(domain_group) when is_map(domain_group) do
-    {group_schema, associations} = group_schema()
+    {group_schema, associations, _lookup_key} = group_schema()
     changeset = group_schema.changeset(group_schema.__struct__(), domain_group)
 
     with {:ok, group} <- repo().insert(changeset) do
@@ -198,7 +193,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def update_group(id, domain_group) do
-    {group_schema, associations} = group_schema()
+    {group_schema, associations, _lookup_key} = group_schema()
 
     with {:ok, existing} <- get_group(id) do
       attrs =
@@ -217,7 +212,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def replace_group(id, domain_group) do
-    {group_schema, _preloads} = group_schema()
+    {group_schema, _preloads, _lookup_key} = group_schema()
 
     with {:ok, existing} <- get_group(id) do
       changeset = group_schema.changeset(existing, Map.from_struct(domain_group))
@@ -241,8 +236,8 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def group_exists?(id) do
-    {group_schema, _preloads} = group_schema()
-    repo().get(group_schema, id) != nil
+    {group_schema, _preloads, lookup_key} = group_schema()
+    repo().get_by(group_schema, [{lookup_key, id}]) != nil
   end
 
   # Private helper functions
@@ -255,9 +250,14 @@ defmodule ExScimEcto.StorageAdapter do
 
   defp parse_model_config(config_key) do
     case Application.get_env(:ex_scim, config_key) do
-      {model, opts} -> {model, Keyword.get(opts, :preload, [])}
-      model when not is_nil(model) -> {model, []}
-      nil -> raise ArgumentError, "Missing configuration for #{inspect(config_key)}"
+      {model, opts} ->
+        {model, Keyword.get(opts, :preload, []), Keyword.get(opts, :lookup_key, :id)}
+
+      model when not is_nil(model) ->
+        {model, [], :id}
+
+      nil ->
+        raise ArgumentError, "Missing configuration for #{inspect(config_key)}"
     end
   end
 
@@ -266,7 +266,7 @@ defmodule ExScimEcto.StorageAdapter do
   defp maybe_preload(records, repo, preloads), do: repo.preload(records, preloads)
 
   defp get_resource_by(schema_opts_fn, field, value) do
-    {resource_schema, associations} = schema_opts_fn.()
+    {resource_schema, associations, _lookup_key} = schema_opts_fn.()
 
     resource_schema
     |> repo().get_by([{field, value}])
