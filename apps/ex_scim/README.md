@@ -21,6 +21,15 @@ Add the dependencies you need to `mix.exs`:
 {:ex_scim_client, path: "ex_scim_client"}   # optional: HTTP client
 ````
 
+Alternatively:
+
+```elixir
+{:ex_scim, git: "https://github.com/ExScim/ex_scim.git", sparse: "apps/ex_scim", branch: "main", override: true},
+{:ex_scim_ecto, git: "https://github.com/ExScim/ex_scim.git", sparse: "apps/ex_scim_ecto", branch: "main", override: true},        # optional: Ecto storage
+{:ex_scim_phoenix, git: "https://github.com/ExScim/ex_scim.git", sparse: "apps/ex_scim_phoenix", branch: "main", override: true},  # optional: Phoenix endpoints
+{:ex_scim_client, git: "https://github.com/ExScim/ex_scim.git", sparse: "apps/ex_scim_client", branch: "main", override: true}     # optional: HTTP client
+```
+
 Run the example provider app to see a working SCIM setup:
 
 ```bash
