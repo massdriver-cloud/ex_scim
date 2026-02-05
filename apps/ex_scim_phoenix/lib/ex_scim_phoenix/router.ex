@@ -1,34 +1,49 @@
 defmodule ExScimPhoenix.Router do
   @moduledoc """
   Router macro for adding SCIM 2.0 HTTP endpoints to Phoenix applications.
-  
+
   Provides a complete set of SCIM 2.0 compliant routes including Users, Groups,
   search, bulk operations, and discovery endpoints.
-  
+
   ## Usage
-  
+
       defmodule MyAppWeb.Router do
         use Phoenix.Router
         use ExScimPhoenix.Router
-        
+
         scope "/scim/v2" do
           pipe_through [:api, :scim_auth]
           scim_routes()
         end
       end
-  
+
   ## Custom Controllers
-  
+
   Override default controllers by passing options:
-  
+
       use ExScimPhoenix.Router,
         user_controller: MyApp.CustomUserController,
         group_controller: MyApp.CustomGroupController
-  
+
+  ## Feature Toggles
+
+  Enable or disable route groups (all enabled by default):
+
+      use ExScimPhoenix.Router,
+        users: true,   # /Users endpoints
+        groups: true,  # /Groups endpoints
+        me: true,      # /Me endpoints
+        bulk: true,    # /Bulk endpoint
+        search: true   # /.search endpoint
+
+  Note: Discovery routes (`/ServiceProviderConfig`, `/ResourceTypes`, `/Schemas`)
+  are always included. Resource-specific search routes (`/Users/.search`,
+  `/Groups/.search`) follow their respective resource toggles.
+
   ## Available Routes
-  
+
   - `GET /Users` - List users
-  - `POST /Users` - Create user  
+  - `POST /Users` - Create user
   - `GET /Users/:id` - Get user
   - `PUT /Users/:id` - Replace user
   - `PATCH /Users/:id` - Update user
@@ -73,31 +88,44 @@ defmodule ExScimPhoenix.Router do
     bulk_controller =
       Keyword.get(opts, :bulk_controller, ExScimPhoenix.Controller.BulkController)
 
+    # Feature toggles with defaults
+    users_enabled = Keyword.get(opts, :users, true)
+    groups_enabled = Keyword.get(opts, :groups, true)
+    me_enabled = Keyword.get(opts, :me, true)
+    bulk_enabled = Keyword.get(opts, :bulk, true)
+    search_enabled = Keyword.get(opts, :search, true)
+
     quote do
       # SCIM v2 API routes - RFC 7644 compliant
 
       # User resource endpoints - RFC 7644
-      get("/Users", unquote(user_controller), :index)
-      post("/Users", unquote(user_controller), :create)
-      get("/Users/:id", unquote(user_controller), :show)
-      put("/Users/:id", unquote(user_controller), :update)
-      patch("/Users/:id", unquote(user_controller), :patch)
-      delete("/Users/:id", unquote(user_controller), :delete)
+      if unquote(users_enabled) do
+        get("/Users", unquote(user_controller), :index)
+        post("/Users", unquote(user_controller), :create)
+        get("/Users/:id", unquote(user_controller), :show)
+        put("/Users/:id", unquote(user_controller), :update)
+        patch("/Users/:id", unquote(user_controller), :patch)
+        delete("/Users/:id", unquote(user_controller), :delete)
+      end
 
       # Me endpoint - RFC 7644
-      get("/Me", unquote(me_controller), :show)
-      post("/Me", unquote(me_controller), :create)
-      put("/Me", unquote(me_controller), :update)
-      patch("/Me", unquote(me_controller), :patch)
-      delete("/Me", unquote(me_controller), :delete)
+      if unquote(me_enabled) do
+        get("/Me", unquote(me_controller), :show)
+        post("/Me", unquote(me_controller), :create)
+        put("/Me", unquote(me_controller), :update)
+        patch("/Me", unquote(me_controller), :patch)
+        delete("/Me", unquote(me_controller), :delete)
+      end
 
       # Group resource endpoints - RFC 7644
-      get("/Groups", unquote(group_controller), :index)
-      post("/Groups", unquote(group_controller), :create)
-      get("/Groups/:id", unquote(group_controller), :show)
-      put("/Groups/:id", unquote(group_controller), :update)
-      patch("/Groups/:id", unquote(group_controller), :patch)
-      delete("/Groups/:id", unquote(group_controller), :delete)
+      if unquote(groups_enabled) do
+        get("/Groups", unquote(group_controller), :index)
+        post("/Groups", unquote(group_controller), :create)
+        get("/Groups/:id", unquote(group_controller), :show)
+        put("/Groups/:id", unquote(group_controller), :update)
+        patch("/Groups/:id", unquote(group_controller), :patch)
+        delete("/Groups/:id", unquote(group_controller), :delete)
+      end
 
       # Service Provider Configuration - RFC 7643
       get("/ServiceProviderConfig", unquote(service_provider_config_controller), :show)
@@ -111,12 +139,22 @@ defmodule ExScimPhoenix.Router do
       get("/Schemas/:id", unquote(schema_controller), :show)
 
       # Search endpoints - RFC 7644
-      post("/Users/.search", unquote(search_controller), :search)
-      post("/Groups/.search", unquote(search_controller), :search)
-      post("/.search", unquote(search_controller), :search_all)
+      if unquote(users_enabled) do
+        post("/Users/.search", unquote(search_controller), :search)
+      end
+
+      if unquote(groups_enabled) do
+        post("/Groups/.search", unquote(search_controller), :search)
+      end
+
+      if unquote(search_enabled) do
+        post("/.search", unquote(search_controller), :search_all)
+      end
 
       # Bulk operations endpoint - RFC 7644
-      post("/Bulk", unquote(bulk_controller), :bulk)
+      if unquote(bulk_enabled) do
+        post("/Bulk", unquote(bulk_controller), :bulk)
+      end
     end
   end
 end
