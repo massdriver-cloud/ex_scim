@@ -22,6 +22,7 @@ defmodule ExScimEcto.StorageAdapter do
         user_model: {MyApp.Accounts.User, lookup_key: :resource_id},
         group_model: {MyApp.Groups.Group, preload: [:members], lookup_key: :uuid}
 
+  See also `ExScim.Resources.Resource`.
   """
 
   @behaviour ExScim.Storage.Adapter
