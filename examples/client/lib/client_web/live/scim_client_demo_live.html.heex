@@ -122,30 +122,37 @@
               />
             </form>
 
-            <%= if @client do %>
-              <div class="divider my-2"></div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="text-sm font-semibold">Provider Capabilities</span>
-                <button
-                  phx-click="refresh_capabilities"
-                  disabled={@running or @capabilities == :loading}
-                  class="btn btn-ghost btn-xs btn-circle"
-                  title="Refresh capabilities"
-                >
-                  <.icon
-                    name="hero-arrow-path"
-                    class={"size-3#{if(@capabilities == :loading, do: " animate-spin", else: "")}"}
-                  />
-                </button>
-              </div>
+            <div class="mt-4">
+              <button
+                phx-click="connect"
+                disabled={is_nil(@client) or @running or @capabilities == :loading}
+                class={[
+                  "btn btn-block",
+                  if(is_nil(@client) or @running or @capabilities == :loading,
+                    do: "btn-disabled",
+                    else: "btn-primary"
+                  )
+                ]}
+              >
+                <%= if @capabilities == :loading do %>
+                  <span class="loading loading-spinner loading-xs"></span> Connecting...
+                <% else %>
+                  <.icon name="hero-signal" class="size-4" />
+                  <%= if match?({:ok, _}, @capabilities), do: "Reconnect", else: "Connect" %>
+                <% end %>
+              </button>
+            </div>
 
+            <%= if @capabilities do %>
+              <div class="divider my-2"></div>
               <%= case @capabilities do %>
                 <% :loading -> %>
                   <div class="flex items-center space-x-2 text-sm opacity-70">
                     <span class="loading loading-spinner loading-xs"></span>
-                    <span>Discovering...</span>
+                    <span>Discovering capabilities...</span>
                   </div>
                 <% {:ok, _body} -> %>
+                  <span class="text-sm font-semibold mb-2">Provider Capabilities</span>
                   <div class="space-y-1">
                     <%= for {label, supported} <- capabilities_summary(@capabilities) do %>
                       <div class="flex items-center justify-between text-xs">
@@ -175,7 +182,6 @@
                     <.icon name="hero-exclamation-triangle" class="size-3" />
                     <span>Could not fetch capabilities</span>
                   </div>
-                <% nil -> %>
               <% end %>
             <% end %>
           </div>

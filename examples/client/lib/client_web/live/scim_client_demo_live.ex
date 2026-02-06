@@ -115,7 +115,7 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:noreply, apply_config(socket, base_url, bearer_token)}
   end
 
-  def handle_event("refresh_capabilities", _params, socket) do
+  def handle_event("connect", _params, socket) do
     socket =
       socket
       |> assign(capabilities_applied: false)
@@ -507,13 +507,13 @@ defmodule ClientWeb.ScimClientDemoLive do
   defp apply_config(socket, base_url, bearer_token) do
     {normalized_base_url, client} = create_scim_client(base_url, bearer_token)
 
-    socket
-    |> assign(
+    assign(socket,
       base_url: normalized_base_url,
       bearer_token: bearer_token,
-      client: client
+      client: client,
+      capabilities: nil,
+      capabilities_applied: false
     )
-    |> maybe_fetch_capabilities(client)
   end
 
   defp maybe_fetch_capabilities(socket, nil) do
