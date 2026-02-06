@@ -245,8 +245,10 @@ defmodule ClientWeb.ScimClientDemoLive do
       end)
 
     socket =
-      update(socket, :progress, fn progress ->
-        min(progress + 10, 100)
+      socket
+      |> update(:progress, fn progress -> min(progress + 10, 100) end)
+      |> then(fn s ->
+        if s.assigns.current_test == test_id, do: assign(s, current_test: nil), else: s
       end)
 
     {:noreply, socket}
@@ -259,8 +261,10 @@ defmodule ClientWeb.ScimClientDemoLive do
       end)
 
     socket =
-      update(socket, :progress, fn progress ->
-        min(progress + 10, 100)
+      socket
+      |> update(:progress, fn progress -> min(progress + 10, 100) end)
+      |> then(fn s ->
+        if s.assigns.current_test == test_id, do: assign(s, current_test: nil), else: s
       end)
 
     {:noreply, socket}

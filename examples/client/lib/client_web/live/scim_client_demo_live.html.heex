@@ -316,25 +316,37 @@
                   </div>
                   
                   <!-- Status Badge -->
-                  <div class={[
-                    "badge",
-                    cond do
-                      test_result.status == :running -> "badge-primary"
-                      test_result.status == :success -> "badge-success"
-                      test_result.status == :error -> "badge-error"
-                      is_nil(@client) -> "badge-neutral opacity-50"
-                      @running -> "badge-warning"
-                      true -> "badge-neutral"
-                    end
-                  ]}>
-                    {cond do
-                      test_result.status == :running -> "Running"
-                      test_result.status == :success -> "Passed"
-                      test_result.status == :error -> "Failed"
-                      is_nil(@client) -> "Not Ready"
-                      @running -> "Waiting"
-                      true -> "Ready"
-                    end}
+                  <div class="flex items-center gap-1">
+                    <%= if test_result.status in [:success, :error] and not @running do %>
+                      <button
+                        phx-click="retry_test"
+                        phx-value-test_id={test_def.id}
+                        class="btn btn-ghost btn-xs btn-circle"
+                        title="Re-run this test"
+                      >
+                        <.icon name="hero-arrow-path" class="size-3.5" />
+                      </button>
+                    <% end %>
+                    <div class={[
+                      "badge",
+                      cond do
+                        test_result.status == :running -> "badge-primary"
+                        test_result.status == :success -> "badge-success"
+                        test_result.status == :error -> "badge-error"
+                        is_nil(@client) -> "badge-neutral opacity-50"
+                        @running -> "badge-warning"
+                        true -> "badge-neutral"
+                      end
+                    ]}>
+                      {cond do
+                        test_result.status == :running -> "Running"
+                        test_result.status == :success -> "Passed"
+                        test_result.status == :error -> "Failed"
+                        is_nil(@client) -> "Not Ready"
+                        @running -> "Waiting"
+                        true -> "Ready"
+                      end}
+                    </div>
                   </div>
                 </div>
                 
@@ -375,21 +387,9 @@
                     </div>
                   <% :error -> %>
                     <div class="space-y-2">
-                      <div class="flex items-center justify-between">
-                        <div class="flex items-center space-x-2 text-error">
-                          <.icon name="hero-x-circle" class="size-4" />
-                          <span class="text-sm font-medium">Test failed</span>
-                        </div>
-
-                        <%= if not @running do %>
-                          <.button
-                            phx-click="retry_test"
-                            phx-value-test_id={test_def.id}
-                            class="btn-error btn-xs"
-                          >
-                            Retry
-                          </.button>
-                        <% end %>
+                      <div class="flex items-center space-x-2 text-error">
+                        <.icon name="hero-x-circle" class="size-4" />
+                        <span class="text-sm font-medium">Test failed</span>
                       </div>
 
                       <%= if test_result.error do %>
