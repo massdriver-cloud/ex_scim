@@ -5,15 +5,13 @@
       <div class="w-auto h-8 bg-primary rounded-lg flex items-center justify-center">
         <span class="text-primary-content font-bold text-sm uppercase p-0.5">Client Demo</span>
       </div>
-      <h1 class="text-2xl font-bold text-base-content">
-        SCIM Integration Tests
-      </h1>
+      
+      <h1 class="text-2xl font-bold text-base-content">SCIM Integration Tests</h1>
     </div>
-    <:actions>
-      <ClientWeb.Layouts.theme_toggle />
-    </:actions>
+    
+    <:actions><ClientWeb.Layouts.theme_toggle /></:actions>
   </.header>
-
+  
   <div class="max-w-7xl mx-auto px-4 py-8">
     <!-- Test Status Section -->
     <div class="card bg-base-100 shadow-xl border border-base-300 mb-8">
@@ -22,6 +20,7 @@
           <div class="flex items-center space-x-4">
             <div class="flex flex-col">
               <h2 class="text-xl font-bold">Test Status</h2>
+              
               <div class="flex items-center space-x-2 mt-1">
                 <%= if @running do %>
                   <span class="loading loading-spinner loading-sm text-primary"></span>
@@ -29,23 +28,23 @@
                 <% else %>
                   <%= if @client do %>
                     <div class="w-3 h-3 bg-success rounded-full"></div>
-                    <span class="text-success font-medium">Ready to Run</span>
+                     <span class="text-success font-medium">Ready to Run</span>
                   <% else %>
                     <div class="w-3 h-3 bg-warning rounded-full"></div>
-                    <span class="text-warning font-medium">Configuration Required</span>
+                     <span class="text-warning font-medium">Configuration Required</span>
                   <% end %>
                 <% end %>
               </div>
             </div>
-
+            
             <%= if @progress > 0 do %>
               <div class="text-right">
                 <div class="text-2xl font-bold text-success">{@progress}%</div>
+                
                 <div class="text-sm opacity-70">Complete</div>
               </div>
             <% end %>
           </div>
-          
           <!-- Start Button -->
           <div class="flex-none">
             <%= if @running do %>
@@ -73,24 +72,23 @@
             <% end %>
           </div>
         </div>
-
+        
         <%= if @progress > 0 and @progress < 100 do %>
           <progress class="progress progress-primary w-full mt-4" value={@progress} max="100">
           </progress>
         <% end %>
       </div>
     </div>
-
+    
     <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
-      
       <!-- Configuration Panel -->
       <div class="lg:col-span-1">
         <div class="card bg-base-100 shadow-xl border border-base-300">
           <div class="card-body">
             <h2 class="card-title mb-4">
-              <.icon name="hero-cog-6-tooth" class="w-5 h-5 mr-2"/>Configuration
+              <.icon name="hero-cog-6-tooth" class="w-5 h-5 mr-2" />Configuration
             </h2>
-
+            
             <form
               phx-change="update_config"
               phx-debounce="500"
@@ -109,7 +107,6 @@
                 disabled={@running}
                 autocomplete="on"
               />
-
               <.input
                 type="text"
                 name="bearer_token"
@@ -121,7 +118,7 @@
                 autocomplete="on"
               />
             </form>
-
+            
             <div class="mt-4">
               <button
                 phx-click="connect"
@@ -137,14 +134,16 @@
                 <%= if @capabilities == :loading do %>
                   <span class="loading loading-spinner loading-xs"></span> Connecting...
                 <% else %>
-                  <.icon name="hero-signal" class="size-4" />
-                  <%= if match?({:ok, _}, @capabilities), do: "Reconnect", else: "Connect" %>
+                  <.icon name="hero-signal" class="size-4" /> {if match?({:ok, _}, @capabilities),
+                    do: "Reconnect",
+                    else: "Connect"}
                 <% end %>
               </button>
             </div>
-
+            
             <%= if @capabilities do %>
               <div class="divider my-2"></div>
+              
               <%= case @capabilities do %>
                 <% :loading -> %>
                   <div class="flex items-center space-x-2 text-sm opacity-70">
@@ -165,6 +164,7 @@
                       </div>
                     <% end %>
                   </div>
+                  
                   <%= if length(auth_schemes(@capabilities)) > 0 do %>
                     <div class="mt-2">
                       <span class="text-xs opacity-70">Auth Schemes</span>
@@ -186,53 +186,54 @@
             <% end %>
           </div>
         </div>
-
-<!-- Test Summary -->
+        <!-- Test Summary -->
         <div class="mt-6 card bg-base-100 shadow-xl border border-base-300">
           <div class="card-body">
             <h3 class="card-title">Test Summary</h3>
-
+            
             <.list>
               <:item title="Selected">
                 <span class="font-semibold">
                   {MapSet.size(@enabled_tests)} / {length(test_definitions())}
                 </span>
               </:item>
+              
               <:item title="Passed">
                 <span class="text-success font-semibold">
                   {@test_results |> Enum.count(fn {_, result} -> result.status == :success end)}
                 </span>
               </:item>
+              
               <:item title="Failed">
                 <span class="text-error font-semibold">
                   {@test_results |> Enum.count(fn {_, result} -> result.status == :error end)}
                 </span>
               </:item>
+              
               <:item title="Running">
                 <span class="text-primary font-semibold">
                   {@test_results |> Enum.count(fn {_, result} -> result.status == :running end)}
                 </span>
               </:item>
             </.list>
-            
-<!-- Progress Bar -->
+            <!-- Progress Bar -->
             <div class="mt-4">
               <div class="flex justify-between text-sm mb-2">
-                <span>Progress</span>
-                <span>{@progress}%</span>
+                <span>Progress</span> <span>{@progress}%</span>
               </div>
+              
               <progress class="progress progress-primary w-full" value={@progress} max="100">
               </progress>
             </div>
           </div>
         </div>
       </div>
-      
-<!-- Main Content -->
+      <!-- Main Content -->
       <div class="lg:col-span-3">
         <!-- Test Grid Header -->
         <div class="flex items-center justify-between mb-4">
           <h2 class="text-lg font-semibold">Test Cases</h2>
+          
           <div class="flex items-center space-x-2">
             <button
               phx-click="toggle_all_tests"
@@ -258,7 +259,6 @@
             </button>
           </div>
         </div>
-
         <!-- Warning when no tests selected -->
         <%= if MapSet.size(@enabled_tests) == 0 do %>
           <div class="alert alert-warning mb-4">
@@ -266,13 +266,14 @@
             <span>No tests selected. Please select at least one test to run.</span>
           </div>
         <% end %>
-
         <!-- Test Grid -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <%= for test_def <- test_definitions() do %>
             <.test_card
               test_def={test_def}
-              test_result={Map.get(@test_results, test_def.id, %{status: :pending, result: nil, error: nil})}
+              test_result={
+                Map.get(@test_results, test_def.id, %{status: :pending, result: nil, error: nil})
+              }
               is_enabled={MapSet.member?(@enabled_tests, test_def.id)}
               client={@client}
               running={@running}
@@ -281,22 +282,17 @@
             />
           <% end %>
         </div>
-        
         <!-- Live Logs -->
         <div class="card bg-base-100 shadow-xl border border-base-300">
           <div class="card-body">
             <div class="flex items-center justify-between mb-4">
-              <h3 class="card-title">
-                Live Test Logs
-              </h3>
-
+              <h3 class="card-title">Live Test Logs</h3>
+              
               <%= if length(@logs) > 0 do %>
-                <div class="badge badge-neutral">
-                  {length(@logs)} entries
-                </div>
+                <div class="badge badge-neutral">{length(@logs)} entries</div>
               <% end %>
             </div>
-
+            
             <%= if length(@logs) == 0 do %>
               <div class="text-center py-8 opacity-50">
                 <.icon name="hero-document-text" class="size-12 mx-auto mb-4" />
@@ -305,11 +301,16 @@
             <% else %>
               <div class="space-y-2 max-h-96 overflow-y-auto">
                 <%= for log <- Enum.reverse(@logs) do %>
-                  <div class="flex items-start space-x-3 py-2 px-3 rounded-lg bg-base-200 hover:bg-base-300 transition-colors">
-                    <div class="text-xs opacity-70 font-mono mt-0.5 flex-shrink-0">
+                  <div class="flex items-center space-x-3 py-2 px-3 rounded-lg bg-base-200 hover:bg-base-300 transition-colors">
+                    <div class="text-xs opacity-70 font-mono flex-shrink-0">
                       {Calendar.strftime(log.timestamp, "%H:%M:%S")}
                     </div>
-                    <div class="flex-1 text-sm font-mono">
+                    
+                    <div class={["flex-shrink-0", log_color(log.level)]}>
+                      <.log_icon level={log.level} class="size-4 block" />
+                    </div>
+                    
+                    <div class={["flex-1 text-sm font-mono", log_color(log.level)]}>
                       {log.message}
                     </div>
                   </div>
@@ -321,27 +322,25 @@
       </div>
     </div>
   </div>
-
   <!-- Full Output Modal -->
   <%= if @modal_output do %>
     <div class="modal modal-open" phx-window-keydown="close_modal" phx-key="Escape">
       <div class="modal-box max-w-4xl max-h-[80vh] flex flex-col">
         <div class="flex items-center justify-between mb-4">
           <h3 class="font-bold text-lg">
-            <%= if @modal_output.type == "error", do: "Error Details", else: "Response Data" %>
-            <span class="text-sm font-normal opacity-70 ml-2">
-              ({@modal_output.test_name})
-            </span>
+            {if @modal_output.type == "error", do: "Error Details", else: "Response Data"}
+            <span class="text-sm font-normal opacity-70 ml-2">({@modal_output.test_name})</span>
           </h3>
-          <button phx-click="close_modal" class="btn btn-sm btn-circle btn-ghost">✕</button>
+           <button phx-click="close_modal" class="btn btn-sm btn-circle btn-ghost">✕</button>
         </div>
+        
         <div class="flex-1 overflow-auto bg-base-200 rounded-lg p-4">
           <pre class="text-xs whitespace-pre-wrap break-all"><%= @modal_output.content %></pre>
         </div>
-        <div class="modal-action">
-          <button phx-click="close_modal" class="btn">Close</button>
-        </div>
+        
+        <div class="modal-action"><button phx-click="close_modal" class="btn">Close</button></div>
       </div>
+      
       <div class="modal-backdrop" phx-click="close_modal"></div>
     </div>
   <% end %>

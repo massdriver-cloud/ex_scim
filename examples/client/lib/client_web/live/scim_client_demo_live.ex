@@ -38,11 +38,9 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:ok, socket}
   end
 
-  def handle_event(
-        "update_config",
-        %{"base_url" => base_url, "bearer_token" => bearer_token},
-        socket
-      ) do
+  def handle_event("update_config", params, socket) do
+    base_url = Map.get(params, "base_url", socket.assigns.base_url)
+    bearer_token = Map.get(params, "bearer_token", socket.assigns.bearer_token)
     {:noreply, apply_config(socket, base_url, bearer_token)}
   end
 
@@ -84,13 +82,20 @@ defmodule ClientWeb.ScimClientDemoLive do
       |> Map.new()
 
     socket =
-      assign(socket,
+      socket
+      |> assign(
         running: false,
         current_test: nil,
         test_task_pid: nil,
         test_results: test_results,
         progress: 0
       )
+      |> update(:logs, fn logs ->
+        [
+          %{timestamp: DateTime.utc_now(), message: "Tests stopped by user", level: :warning}
+          | logs
+        ]
+      end)
 
     {:noreply, put_flash(socket, :info, "Tests stopped")}
   end
@@ -220,10 +225,10 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:noreply, assign(socket, created_user_id: user_id)}
   end
 
-  def handle_info({:log_message, message}, socket) do
+  def handle_info({:log_message, message, level}, socket) do
     socket =
       update(socket, :logs, fn logs ->
-        [%{timestamp: DateTime.utc_now(), message: message} | logs]
+        [%{timestamp: DateTime.utc_now(), message: message, level: level} | logs]
       end)
 
     {:noreply, socket}
@@ -345,20 +350,22 @@ defmodule ClientWeb.ScimClientDemoLive do
                 true -> "bg-base-300"
               end
             ]}>
-              <.icon name={@test_def.icon}/>
+              <.icon name={@test_def.icon} />
             </div>
-
+            
             <div>
               <h3 class="card-title text-base">{@test_def.name}</h3>
+              
               <p class="text-sm opacity-70">{@test_def.description}</p>
+              
               <%= if not @is_enabled and test_unsupported_by_provider?(@capabilities, @test_def.id) do %>
                 <p class="text-xs text-warning mt-0.5">
-                  <.icon name="hero-exclamation-triangle" class="size-3 inline" /> Not supported by provider
+                  <.icon name="hero-exclamation-triangle" class="size-3 inline" />
+                  Not supported by provider
                 </p>
               <% end %>
             </div>
           </div>
-
           <!-- Status Badge -->
           <div class="flex items-center gap-1">
             <%= if @test_result.status in [:success, :error] and not @running do %>
@@ -371,12 +378,12 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-arrow-path" class="size-3.5" />
               </button>
             <% end %>
+            
             <div class={["badge", badge_class(@test_result.status, @client, @running)]}>
               {badge_text(@test_result.status, @client, @running)}
             </div>
           </div>
         </div>
-
         <!-- Test Status -->
         <%= case @test_result.status do %>
           <% :running -> %>
@@ -390,16 +397,16 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-check-circle" class="size-4" />
                 <span class="text-sm font-medium">Test passed</span>
               </div>
-
+              
               <%= if @test_result.result do %>
                 <details class="collapse bg-base-200">
-                  <summary class="collapse-title text-xs cursor-pointer">
-                    View response data
-                  </summary>
+                  <summary class="collapse-title text-xs cursor-pointer">View response data</summary>
+                  
                   <div class="collapse-content">
                     <div class="max-h-32 overflow-auto">
                       <pre class="text-xs whitespace-pre-wrap break-all"><%= truncate_output(@test_result.result) %></pre>
                     </div>
+                    
                     <button
                       phx-click="show_full_output"
                       phx-value-test_id={@test_def.id}
@@ -418,15 +425,16 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-x-circle" class="size-4" />
                 <span class="text-sm font-medium">Test failed</span>
               </div>
-
+              
               <%= if @test_result.error do %>
                 <div class="alert alert-error">
                   <div class="flex-1 min-w-0">
                     <div class="max-h-24 overflow-auto">
                       <p class="text-xs font-mono whitespace-pre-wrap break-all">
-                        <%= truncate_output(@test_result.error) %>
+                        {truncate_output(@test_result.error)}
                       </p>
                     </div>
+                    
                     <button
                       phx-click="show_full_output"
                       phx-value-test_id={@test_def.id}
@@ -454,17 +462,16 @@ defmodule ClientWeb.ScimClientDemoLive do
               <% true -> %>
                 <div class="flex items-center space-x-2 opacity-70">
                   <div class="w-4 h-4 border border-base-300 rounded-full"></div>
-                  <span class="text-sm">Ready to run</span>
+                   <span class="text-sm">Ready to run</span>
                 </div>
             <% end %>
         <% end %>
-
         <!-- Active Test Indicator -->
         <%= if @current_test == @test_def.id do %>
           <div class="mt-3 alert alert-info">
             <div class="flex items-center space-x-2">
               <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-              <span class="text-xs font-medium">Currently executing</span>
+               <span class="text-xs font-medium">Currently executing</span>
             </div>
           </div>
         <% end %>
@@ -576,6 +583,81 @@ defmodule ClientWeb.ScimClientDemoLive do
         :ok
     end
   end
+
+  defp log_icon(%{level: :start} = assigns) do
+    ~H"""
+    <.icon name="hero-rocket-launch-solid" class={@class} />
+    """
+  end
+
+  defp log_icon(%{level: :running} = assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="size-4"
+    >
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M5 13a7 7 0 1 0 14 0a7 7 0 0 0 -14 0" /><path d="M14.5 10.5l-2.5 2.5" /><path d="M17 8l1 -1" /><path d="M14 3h-4" />
+    </svg>
+    """
+  end
+
+  defp log_icon(%{level: :success} = assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="size-4"
+    >
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M9 11l3 3l8 -8" /><path d="M20 12v6a2 2 0 0 1 -2 2h-12a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h9" />
+    </svg>
+    """
+  end
+
+  defp log_icon(%{level: :error} = assigns) do
+    ~H"""
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="2"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      class="size-4"
+    >
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M3 5a2 2 0 0 1 2 -2h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14" /><path d="M12 8v4" /><path d="M12 16h.01" />
+    </svg>
+    """
+  end
+
+  defp log_icon(%{level: :warning} = assigns) do
+    ~H"""
+    <.icon name="hero-stop" class={@class} />
+    """
+  end
+
+  defp log_color(:start), do: "text-primary"
+  defp log_color(:running), do: "text-info"
+  defp log_color(:success), do: "text-success"
+  defp log_color(:error), do: "text-error"
+  defp log_color(:warning), do: "text-warning"
 
   @max_output_length 500
 

@@ -14,8 +14,16 @@ defmodule Client.ScimTesting do
 
   @first_names ["John", "Jane", "Alice", "Bob", "Charlie", "Diana", "Eve", "Frank"]
   @last_names ["Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis"]
-  @job_titles ["Software Engineer", "Product Manager", "Data Analyst", "Designer",
-               "Developer", "Consultant", "Architect", "Manager"]
+  @job_titles [
+    "Software Engineer",
+    "Product Manager",
+    "Data Analyst",
+    "Designer",
+    "Developer",
+    "Consultant",
+    "Architect",
+    "Manager"
+  ]
 
   @test_definitions [
     %{
@@ -205,7 +213,7 @@ defmodule Client.ScimTesting do
   to the provided process ID. Only tests in the enabled_tests set will be executed.
   """
   def run_all_tests(pid, client, enabled_tests) do
-    send(pid, {:log_message, "🚀 Starting SCIM Integration Tests"})
+    send(pid, {:log_message, "Starting SCIM Integration Tests", :start})
 
     # Only run create_user if enabled
     user_id =
@@ -250,7 +258,7 @@ defmodule Client.ScimTesting do
   """
   def run_single_test(pid, client, test_id, user_id) do
     send(pid, {:test_started, test_id})
-    send(pid, {:log_message, "Running #{test_id}..."})
+    send(pid, {:log_message, "Running #{test_id}...", :running})
 
     # Validate client first
     case validate_client(client) do
@@ -260,7 +268,7 @@ defmodule Client.ScimTesting do
 
       {:error, reason} ->
         send(pid, {:test_failed, test_id, reason})
-        send(pid, {:log_message, "❌ #{test_id} failed: #{reason}"})
+        send(pid, {:log_message, "#{test_id} failed: #{reason}", :error})
         {:error, reason}
     end
   end
@@ -296,7 +304,7 @@ defmodule Client.ScimTesting do
     case result do
       {:ok, data} ->
         send(pid, {:test_completed, test_id, data})
-        send(pid, {:log_message, "✅ #{test_id} completed successfully"})
+        send(pid, {:log_message, "#{test_id} completed successfully", :success})
         {:ok, data}
 
       {:error, reason} ->
@@ -309,7 +317,7 @@ defmodule Client.ScimTesting do
 
   defp report_failure(pid, test_id, error_message) do
     send(pid, {:test_failed, test_id, error_message})
-    send(pid, {:log_message, "❌ #{test_id} failed: #{error_message}"})
+    send(pid, {:log_message, "#{test_id} failed: #{error_message}", :error})
     {:error, error_message}
   end
 
