@@ -2,8 +2,47 @@ defmodule ClientWeb.ScimClientDemoLive do
   use ClientWeb, :live_view
 
   alias ExScimClient.Client, as: ScimClient
-  alias ExScimClient.Resources.ServiceProviderConfig
+  alias ExScimClient.Filter
+  alias ExScimClient.Resources.{Groups, ServiceProviderConfig, Users}
   alias Client.ScimTesting
+
+  @user_attributes [
+    {"userName", "userName"},
+    {"displayName", "displayName"},
+    {"name.givenName", "name.givenName"},
+    {"name.familyName", "name.familyName"},
+    {"emails.value", "emails.value"},
+    {"active", "active"},
+    {"title", "title"},
+    {"userType", "userType"},
+    {"externalId", "externalId"},
+    {"id", "id"},
+    {"meta.created", "meta.created"},
+    {"meta.lastModified", "meta.lastModified"}
+  ]
+
+  @group_attributes [
+    {"displayName", "displayName"},
+    {"id", "id"},
+    {"externalId", "externalId"},
+    {"members.value", "members.value"},
+    {"members.display", "members.display"},
+    {"meta.created", "meta.created"},
+    {"meta.lastModified", "meta.lastModified"}
+  ]
+
+  @filter_operators [
+    {"eq", "equals"},
+    {"ne", "not equal"},
+    {"co", "contains"},
+    {"sw", "starts with"},
+    {"ew", "ends with"},
+    {"gt", "greater than"},
+    {"ge", "greater or equal"},
+    {"lt", "less than"},
+    {"le", "less or equal"},
+    {"pr", "present"}
+  ]
 
   @capability_display_items [
     {"patch", "PATCH Operations"},
@@ -30,7 +69,16 @@ defmodule ClientWeb.ScimClientDemoLive do
         enabled_tests: ScimTesting.default_enabled_tests(),
         capabilities: nil,
         capabilities_applied: false,
-        modal_output: nil
+        modal_output: nil,
+        search_resource_type: "Users",
+        search_filter_rows: [%{id: 1, attribute: "userName", operator: "eq", value: ""}],
+        search_combinator: "and",
+        search_next_row_id: 2,
+        search_results: nil,
+        search_error: nil,
+        search_loading: false,
+        search_page_size: 50,
+        search_start_index: 1
       )
 
     send(self(), :load_saved_config)
@@ -184,6 +232,155 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:noreply, assign(socket, modal_output: nil)}
   end
 
+  def handle_event("search_resource_type", %{"resource_type" => type}, socket) do
+    {:noreply,
+     assign(socket,
+       search_resource_type: type,
+       search_filter_rows: [%{id: 1, attribute: default_attr(type), operator: "eq", value: ""}],
+       search_next_row_id: 2,
+       search_results: nil,
+       search_error: nil
+     )}
+  end
+
+  def handle_event("update_filter_row", %{"row-id" => row_id_str} = params, socket) do
+    row_id = String.to_integer(row_id_str)
+
+    socket =
+      update(socket, :search_filter_rows, fn rows ->
+        Enum.map(rows, fn row ->
+          if row.id == row_id do
+            row
+            |> maybe_put_param(params, "attribute", :attribute)
+            |> maybe_put_param(params, "operator", :operator)
+            |> maybe_put_param(params, "value", :value)
+          else
+            row
+          end
+        end)
+      end)
+
+    {:noreply, socket}
+  end
+
+  def handle_event("add_filter_row", _params, socket) do
+    new_row = %{
+      id: socket.assigns.search_next_row_id,
+      attribute: default_attr(socket.assigns.search_resource_type),
+      operator: "eq",
+      value: ""
+    }
+
+    socket =
+      socket
+      |> update(:search_filter_rows, fn rows -> rows ++ [new_row] end)
+      |> update(:search_next_row_id, &(&1 + 1))
+
+    {:noreply, socket}
+  end
+
+  def handle_event("remove_filter_row", %{"row-id" => row_id_str}, socket) do
+    row_id = String.to_integer(row_id_str)
+    remaining = Enum.reject(socket.assigns.search_filter_rows, &(&1.id == row_id))
+    {:noreply, assign(socket, search_filter_rows: remaining)}
+  end
+
+  def handle_event("search_combinator", %{"combinator" => combinator}, socket) do
+    {:noreply, assign(socket, search_combinator: combinator)}
+  end
+
+  def handle_event("update_search_page_size", %{"page_size" => size_str}, socket) do
+    {:noreply, assign(socket, search_page_size: String.to_integer(size_str))}
+  end
+
+  def handle_event("search_page_size", %{"page_size" => size_str}, socket) do
+    socket = assign(socket, search_page_size: String.to_integer(size_str), search_start_index: 1)
+    send(self(), :run_search)
+    {:noreply, assign(socket, search_loading: true, search_error: nil)}
+  end
+
+  def handle_event("search_page", %{"start_index" => idx_str}, socket) do
+    socket = assign(socket, search_start_index: String.to_integer(idx_str))
+    send(self(), :run_search)
+    {:noreply, assign(socket, search_loading: true, search_error: nil)}
+  end
+
+  def handle_event("execute_search", _params, socket) do
+    if is_nil(socket.assigns.client) do
+      {:noreply, put_flash(socket, :error, "Please connect to a SCIM provider first")}
+    else
+      send(self(), :run_search)
+      {:noreply, assign(socket, search_loading: true, search_error: nil, search_start_index: 1)}
+    end
+  end
+
+  def handle_event("show_resource", %{"index" => index_str}, socket) do
+    index = String.to_integer(index_str)
+    resources = get_in(socket.assigns.search_results, ["Resources"]) || []
+    resource = Enum.at(resources, index)
+
+    if resource do
+      content = Jason.encode!(resource, pretty: true)
+
+      modal_output = %{
+        test_id: :search_result,
+        test_name: "#{socket.assigns.search_resource_type} Resource",
+        type: "result",
+        content: content
+      }
+
+      {:noreply, assign(socket, modal_output: modal_output)}
+    else
+      {:noreply, socket}
+    end
+  end
+
+  def handle_info(:run_search, socket) do
+    live_view_pid = self()
+    client = socket.assigns.client
+    resource_type = socket.assigns.search_resource_type
+    filter_rows = socket.assigns.search_filter_rows
+    combinator = socket.assigns.search_combinator
+    page_size = socket.assigns.search_page_size
+    start_index = socket.assigns.search_start_index
+
+    Task.start(fn ->
+      result =
+        try do
+          filter = build_filter(filter_rows, combinator)
+          pagination = ExScimClient.Pagination.new(page_size, start_index)
+
+          opts =
+            [pagination: pagination]
+            |> then(fn opts ->
+              if filter, do: Keyword.put(opts, :filter, filter), else: opts
+            end)
+
+          case resource_type do
+            "Users" -> Users.list(client, opts)
+            "Groups" -> Groups.list(client, opts)
+          end
+        rescue
+          error -> {:error, "Request failed: #{Exception.message(error)}"}
+        catch
+          :exit, reason -> {:error, "Request terminated: #{inspect(reason)}"}
+        end
+
+      send(live_view_pid, {:search_completed, result})
+    end)
+
+    {:noreply, socket}
+  end
+
+  def handle_info({:search_completed, {:ok, results}}, socket) do
+    {:noreply, assign(socket, search_results: results, search_loading: false, search_error: nil)}
+  end
+
+  def handle_info({:search_completed, {:error, reason}}, socket) do
+    message = if is_binary(reason), do: reason, else: inspect(reason)
+    {:noreply, assign(socket, search_results: nil, search_loading: false, search_error: message)}
+  end
+
   def handle_info(:run_tests, socket) do
     live_view_pid = self()
     enabled_tests = socket.assigns.enabled_tests
@@ -315,6 +512,36 @@ defmodule ClientWeb.ScimClientDemoLive do
       _ ->
         false
     end
+  end
+
+  def filter_operators, do: @filter_operators
+
+  def attribute_options("Users"), do: @user_attributes
+  def attribute_options("Groups"), do: @group_attributes
+  def attribute_options(_), do: @user_attributes
+
+  def build_request_preview(assigns) do
+    resource_path = if assigns.search_resource_type == "Users", do: "/Users", else: "/Groups"
+    filter = build_filter(assigns.search_filter_rows, assigns.search_combinator)
+
+    params =
+      %{
+        "count" => to_string(assigns.search_page_size),
+        "startIndex" => to_string(assigns.search_start_index)
+      }
+      |> then(fn p ->
+        if filter, do: Map.put(p, "filter", Filter.build(filter)), else: p
+      end)
+
+    query = URI.encode_query(params)
+    path = assigns.base_url <> resource_path
+    "GET #{path}?#{query}"
+  end
+
+  def get_primary_email(resource) do
+    emails = Map.get(resource, "emails", [])
+    primary = Enum.find(emails, List.first(emails), &Map.get(&1, "primary"))
+    if primary, do: Map.get(primary, "value", "-"), else: "-"
   end
 
   attr :test_def, :map, required: true
@@ -591,6 +818,57 @@ defmodule ClientWeb.ScimClientDemoLive do
 
       true ->
         :ok
+    end
+  end
+
+  defp default_attr("Users"), do: "userName"
+  defp default_attr("Groups"), do: "displayName"
+  defp default_attr(_), do: "userName"
+
+  defp maybe_put_param(row, params, param_key, row_key) do
+    case Map.fetch(params, param_key) do
+      {:ok, val} -> Map.put(row, row_key, val)
+      :error -> row
+    end
+  end
+
+  defp build_filter(rows, combinator) do
+    valid_rows =
+      Enum.filter(rows, fn row ->
+        row.attribute != "" and row.operator != "" and
+          (row.operator == "pr" or (row.value != nil and row.value != ""))
+      end)
+
+    case valid_rows do
+      [] ->
+        nil
+
+      [single] ->
+        build_single_filter(single)
+
+      [first | rest] ->
+        combine_fn = if combinator == "or", do: &Filter.or1/2, else: &Filter.and1/2
+
+        Enum.reduce(rest, build_single_filter(first), fn row, acc ->
+          combine_fn.(acc, build_single_filter(row))
+        end)
+    end
+  end
+
+  defp build_single_filter(%{attribute: attr, operator: op, value: val}) do
+    filter = Filter.new()
+
+    case op do
+      "eq" -> Filter.equals(filter, attr, val)
+      "ne" -> Filter.not_equal(filter, attr, val)
+      "co" -> Filter.contains(filter, attr, val)
+      "sw" -> Filter.starts_with(filter, attr, val)
+      "ew" -> Filter.ends_with(filter, attr, val)
+      "gt" -> Filter.greater_than(filter, attr, val)
+      "ge" -> Filter.greater_or_equal(filter, attr, val)
+      "lt" -> Filter.less_than(filter, attr, val)
+      "le" -> Filter.less_or_equal(filter, attr, val)
+      "pr" -> Filter.present(filter, attr, nil)
     end
   end
 
