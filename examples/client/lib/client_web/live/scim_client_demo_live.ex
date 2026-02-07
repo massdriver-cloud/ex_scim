@@ -38,6 +38,16 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:ok, socket}
   end
 
+  def handle_params(_params, _uri, socket) do
+    page_title =
+      case socket.assigns.live_action do
+        :tests -> "Tests"
+        :search -> "Search"
+      end
+
+    {:noreply, assign(socket, page_title: page_title)}
+  end
+
   def handle_event("update_config", params, socket) do
     base_url = Map.get(params, "base_url", socket.assigns.base_url)
     bearer_token = Map.get(params, "bearer_token", socket.assigns.bearer_token)
@@ -352,12 +362,12 @@ defmodule ClientWeb.ScimClientDemoLive do
             ]}>
               <.icon name={@test_def.icon} />
             </div>
-            
+
             <div>
               <h3 class="card-title text-base">{@test_def.name}</h3>
-              
+
               <p class="text-sm opacity-70">{@test_def.description}</p>
-              
+
               <%= if not @is_enabled and test_unsupported_by_provider?(@capabilities, @test_def.id) do %>
                 <p class="text-xs text-warning mt-0.5">
                   <.icon name="hero-exclamation-triangle" class="size-3 inline" />
@@ -378,7 +388,7 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-arrow-path" class="size-3.5" />
               </button>
             <% end %>
-            
+
             <div class={["badge", badge_class(@test_result.status, @client, @running)]}>
               {badge_text(@test_result.status, @client, @running)}
             </div>
@@ -397,16 +407,16 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-check-circle" class="size-4" />
                 <span class="text-sm font-medium">Test passed</span>
               </div>
-              
+
               <%= if @test_result.result do %>
                 <details class="collapse bg-base-200">
                   <summary class="collapse-title text-xs cursor-pointer">View response data</summary>
-                  
+
                   <div class="collapse-content">
                     <div class="max-h-32 overflow-auto">
                       <pre class="text-xs whitespace-pre-wrap break-all"><%= truncate_output(@test_result.result) %></pre>
                     </div>
-                    
+
                     <button
                       phx-click="show_full_output"
                       phx-value-test_id={@test_def.id}
@@ -425,7 +435,7 @@ defmodule ClientWeb.ScimClientDemoLive do
                 <.icon name="hero-x-circle" class="size-4" />
                 <span class="text-sm font-medium">Test failed</span>
               </div>
-              
+
               <%= if @test_result.error do %>
                 <div class="alert alert-error">
                   <div class="flex-1 min-w-0">
@@ -434,7 +444,7 @@ defmodule ClientWeb.ScimClientDemoLive do
                         {truncate_output(@test_result.error)}
                       </p>
                     </div>
-                    
+
                     <button
                       phx-click="show_full_output"
                       phx-value-test_id={@test_def.id}
@@ -462,7 +472,7 @@ defmodule ClientWeb.ScimClientDemoLive do
               <% true -> %>
                 <div class="flex items-center space-x-2 opacity-70">
                   <div class="w-4 h-4 border border-base-300 rounded-full"></div>
-                   <span class="text-sm">Ready to run</span>
+                  <span class="text-sm">Ready to run</span>
                 </div>
             <% end %>
         <% end %>
@@ -471,7 +481,7 @@ defmodule ClientWeb.ScimClientDemoLive do
           <div class="mt-3 alert alert-info">
             <div class="flex items-center space-x-2">
               <div class="w-2 h-2 bg-primary rounded-full animate-pulse"></div>
-               <span class="text-xs font-medium">Currently executing</span>
+              <span class="text-xs font-medium">Currently executing</span>
             </div>
           </div>
         <% end %>

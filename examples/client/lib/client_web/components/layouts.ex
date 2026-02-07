@@ -12,60 +12,50 @@ defmodule ClientWeb.Layouts do
   embed_templates "layouts/*"
 
   @doc """
-  Renders your app layout.
+  Renders the top navigation bar.
 
-  This function is typically invoked from every template,
-  and it often contains your application menu, sidebar,
-  or similar.
-
-  ## Examples
-
-      <Layouts.app flash={@flash}>
-        <h1>Content</h1>
-      </Layouts.app>
-
+  Highlights the active tab based on `live_action` and provides
+  `live_patch` links for instant client-side navigation.
   """
-  attr :flash, :map, required: true, doc: "the map of flash messages"
+  attr :live_action, :atom, required: true
 
-  attr :current_scope, :map,
-    default: nil,
-    doc: "the current [scope](https://hexdocs.pm/phoenix/scopes.html)"
-
-  slot :inner_block, required: true
-
-  def app(assigns) do
+  def navbar(assigns) do
     ~H"""
-    <header class="navbar px-4 sm:px-6 lg:px-8">
-      <div class="flex-1">
-        <a href="/" class="flex-1 flex w-fit items-center gap-2">
-          <img src={~p"/images/logo.svg"} width="36" />
-          <span class="text-sm font-semibold">v{Application.spec(:phoenix, :vsn)}</span>
-        </a>
-      </div>
-      
-      <div class="flex-none">
-        <ul class="flex flex-column px-1 space-x-4 items-center">
-          <li><a href="https://phoenixframework.org/" class="btn btn-ghost">Website</a></li>
-          
+    <div class="navbar bg-base-100 shadow-sm border-b border-base-300 px-4 sm:px-6 lg:px-8">
+      <div class="flex-1 gap-4">
+        <div class="flex items-center space-x-3">
+          <div class="w-auto h-8 bg-primary rounded-lg flex items-center justify-center">
+            <span class="text-primary-content font-bold text-sm uppercase p-0.5">Client Demo</span>
+          </div>
+          <span class="text-lg font-bold text-base-content hidden sm:inline">
+            SCIM Integration Tests
+          </span>
+        </div>
+
+        <ul class="menu menu-horizontal px-1 gap-1">
           <li>
-            <a href="https://github.com/phoenixframework/phoenix" class="btn btn-ghost">GitHub</a>
+            <.link
+              patch={~p"/"}
+              class={if @live_action == :tests, do: "active", else: ""}
+            >
+              <.icon name="hero-beaker" class="size-4" /> Tests
+            </.link>
           </li>
-          
-          <li><.theme_toggle /></li>
-          
           <li>
-            <a href="https://hexdocs.pm/phoenix/overview.html" class="btn btn-primary">
-              Get Started <span aria-hidden="true">&rarr;</span>
-            </a>
+            <.link
+              patch={~p"/search"}
+              class={if @live_action == :search, do: "active", else: ""}
+            >
+              <.icon name="hero-magnifying-glass" class="size-4" /> Search
+            </.link>
           </li>
         </ul>
       </div>
-    </header>
 
-    <main class="px-4 py-20 sm:px-6 lg:px-8">
-      <div class="mx-auto max-w-2xl space-y-4">{render_slot(@inner_block)}</div>
-    </main>
-     <.flash_group flash={@flash} />
+      <div class="flex-none">
+        <.theme_toggle />
+      </div>
+    </div>
     """
   end
 
@@ -94,7 +84,7 @@ defmodule ClientWeb.Layouts do
         {gettext("Attempting to reconnect")}
         <.icon name="hero-arrow-path" class="ml-1 size-3 motion-safe:animate-spin" />
       </.flash>
-      
+
       <.flash
         id="server-error"
         kind={:error}

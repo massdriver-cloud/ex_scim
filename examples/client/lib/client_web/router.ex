@@ -17,7 +17,8 @@ defmodule ClientWeb.Router do
   scope "/", ClientWeb do
     pipe_through :browser
 
-    live "/", ScimClientDemoLive
+    live "/", ScimClientDemoLive, :tests
+    live "/search", ScimClientDemoLive, :search
   end
 
   # Other scopes may use custom stacks.
