@@ -3,10 +3,21 @@ defmodule ClientWeb.ScimClientDemoLive do
 
   alias ExScimClient.Client, as: ScimClient
   alias ExScimClient.Filter
-  alias ExScimClient.Resources.{Groups, ServiceProviderConfig, Users}
+  alias ExScimClient.Resources.{Groups, Schemas, ServiceProviderConfig, Users}
   alias Client.ScimTesting
 
-  @user_attributes [
+  @user_schema_id "urn:ietf:params:scim:schemas:core:2.0:User"
+  @group_schema_id "urn:ietf:params:scim:schemas:core:2.0:Group"
+  @enterprise_user_schema_id "urn:ietf:params:scim:schemas:extension:enterprise:2.0:User"
+
+  @common_attributes [
+    {"id", "id"},
+    {"externalId", "externalId"},
+    {"meta.created", "meta.created"},
+    {"meta.lastModified", "meta.lastModified"}
+  ]
+
+  @fallback_user_attributes [
     {"userName", "userName"},
     {"displayName", "displayName"},
     {"name.givenName", "name.givenName"},
@@ -14,21 +25,13 @@ defmodule ClientWeb.ScimClientDemoLive do
     {"emails.value", "emails.value"},
     {"active", "active"},
     {"title", "title"},
-    {"userType", "userType"},
-    {"externalId", "externalId"},
-    {"id", "id"},
-    {"meta.created", "meta.created"},
-    {"meta.lastModified", "meta.lastModified"}
+    {"userType", "userType"}
   ]
 
-  @group_attributes [
+  @fallback_group_attributes [
     {"displayName", "displayName"},
-    {"id", "id"},
-    {"externalId", "externalId"},
     {"members.value", "members.value"},
-    {"members.display", "members.display"},
-    {"meta.created", "meta.created"},
-    {"meta.lastModified", "meta.lastModified"}
+    {"members.display", "members.display"}
   ]
 
   @filter_operators [
@@ -78,7 +81,10 @@ defmodule ClientWeb.ScimClientDemoLive do
         search_error: nil,
         search_loading: false,
         search_page_size: 50,
-        search_start_index: 1
+        search_start_index: 1,
+        schemas: nil,
+        schemas_loading: false,
+        enabled_schemas: MapSet.new([@user_schema_id, @group_schema_id])
       )
 
     send(self(), :load_saved_config)
@@ -179,10 +185,13 @@ defmodule ClientWeb.ScimClientDemoLive do
   end
 
   def handle_event("connect", _params, socket) do
+    client = socket.assigns.client
+
     socket =
       socket
       |> assign(capabilities_applied: false)
-      |> maybe_fetch_capabilities(socket.assigns.client)
+      |> maybe_fetch_capabilities(client)
+      |> maybe_fetch_schemas(client)
 
     {:noreply, socket}
   end
@@ -232,6 +241,22 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:noreply, assign(socket, modal_output: nil)}
   end
 
+  def handle_event("toggle_schema", %{"schema-id" => schema_id}, socket) do
+    enabled_schemas = socket.assigns.enabled_schemas
+
+    enabled_schemas =
+      if MapSet.member?(enabled_schemas, schema_id),
+        do: MapSet.delete(enabled_schemas, schema_id),
+        else: MapSet.put(enabled_schemas, schema_id)
+
+    {:noreply,
+     assign(socket,
+       enabled_schemas: enabled_schemas,
+       search_filter_rows: [],
+       search_next_row_id: 1
+     )}
+  end
+
   def handle_event("search_resource_type", %{"resource_type" => type}, socket) do
     {:noreply,
      assign(socket,
@@ -266,7 +291,7 @@ defmodule ClientWeb.ScimClientDemoLive do
   def handle_event("add_filter_row", _params, socket) do
     new_row = %{
       id: socket.assigns.search_next_row_id,
-      attribute: default_attr(socket.assigns.search_resource_type),
+      attribute: default_attr(socket.assigns.search_resource_type, socket.assigns.schemas, socket.assigns.enabled_schemas),
       operator: "eq",
       value: ""
     }
@@ -477,6 +502,21 @@ defmodule ClientWeb.ScimClientDemoLive do
     {:noreply, assign(socket, capabilities: {:error, message})}
   end
 
+  def handle_info({:schemas_fetched, {:ok, schemas_map}}, socket) do
+    enabled_schemas =
+      if Map.has_key?(schemas_map, @enterprise_user_schema_id) do
+        MapSet.put(socket.assigns.enabled_schemas, @enterprise_user_schema_id)
+      else
+        socket.assigns.enabled_schemas
+      end
+
+    {:noreply, assign(socket, schemas: schemas_map, schemas_loading: false, enabled_schemas: enabled_schemas)}
+  end
+
+  def handle_info({:schemas_fetched, {:error, _reason}}, socket) do
+    {:noreply, assign(socket, schemas: nil, schemas_loading: false)}
+  end
+
   def test_definitions, do: ScimTesting.test_definitions()
 
   def capability_supported?(capabilities, key) do
@@ -512,9 +552,82 @@ defmodule ClientWeb.ScimClientDemoLive do
 
   def filter_operators, do: @filter_operators
 
-  def attribute_options("Users"), do: @user_attributes
-  def attribute_options("Groups"), do: @group_attributes
-  def attribute_options(_), do: @user_attributes
+  def enterprise_user_schema_id, do: @enterprise_user_schema_id
+
+  def attribute_options(resource_type, schemas, enabled_schemas) do
+    case {schemas, resource_type} do
+      {nil, "Users"} ->
+        [{"User", @fallback_user_attributes ++ @common_attributes}]
+
+      {nil, "Groups"} ->
+        [{"Group", @fallback_group_attributes ++ @common_attributes}]
+
+      {nil, _} ->
+        [{"User", @fallback_user_attributes ++ @common_attributes}]
+
+      {schemas, "Users"} ->
+        groups =
+          if MapSet.member?(enabled_schemas, @user_schema_id) do
+            case Map.get(schemas, @user_schema_id) do
+              nil -> [{"User", @fallback_user_attributes}]
+              schema -> [{"User", schema_to_attributes(schema, nil)}]
+            end
+          else
+            []
+          end
+
+        groups =
+          if MapSet.member?(enabled_schemas, @enterprise_user_schema_id) do
+            case Map.get(schemas, @enterprise_user_schema_id) do
+              nil ->
+                groups
+
+              schema ->
+                groups ++ [{"Enterprise User", schema_to_attributes(schema, @enterprise_user_schema_id)}]
+            end
+          else
+            groups
+          end
+
+        groups ++ [{"Common", @common_attributes}]
+
+      {schemas, "Groups"} ->
+        groups =
+          case Map.get(schemas, @group_schema_id) do
+            nil -> [{"Group", @fallback_group_attributes}]
+            schema -> [{"Group", schema_to_attributes(schema, nil)}]
+          end
+
+        groups ++ [{"Common", @common_attributes}]
+    end
+  end
+
+  defp schema_to_attributes(schema, uri_prefix) do
+    attributes = Map.get(schema, "attributes", [])
+
+    attributes
+    |> Enum.flat_map(fn attr ->
+      name = Map.get(attr, "name", "")
+      type = Map.get(attr, "type", "")
+
+      if type == "complex" do
+        sub_attrs = Map.get(attr, "subAttributes", [])
+
+        sub_attrs
+        |> Enum.reject(fn sub -> Map.get(sub, "name") == "$ref" end)
+        |> Enum.map(fn sub ->
+          sub_name = Map.get(sub, "name", "")
+          path = "#{name}.#{sub_name}"
+          prefixed = if uri_prefix, do: "#{uri_prefix}:#{path}", else: path
+          {prefixed, prefixed}
+        end)
+      else
+        prefixed = if uri_prefix, do: "#{uri_prefix}:#{name}", else: name
+        [{prefixed, prefixed}]
+      end
+    end)
+    |> Enum.sort_by(fn {_value, label} -> label end)
+  end
 
   def build_request_preview(assigns) do
     resource_path = if assigns.search_resource_type == "Users", do: "/Users", else: "/Groups"
@@ -752,7 +865,10 @@ defmodule ClientWeb.ScimClientDemoLive do
       bearer_token: bearer_token,
       client: client,
       capabilities: nil,
-      capabilities_applied: false
+      capabilities_applied: false,
+      schemas: nil,
+      schemas_loading: false,
+      enabled_schemas: MapSet.new([@user_schema_id, @group_schema_id])
     )
   end
 
@@ -777,6 +893,49 @@ defmodule ClientWeb.ScimClientDemoLive do
     end)
 
     assign(socket, capabilities: :loading)
+  end
+
+  defp maybe_fetch_schemas(socket, nil) do
+    assign(socket, schemas: nil, schemas_loading: false)
+  end
+
+  defp maybe_fetch_schemas(socket, client) do
+    live_view_pid = self()
+
+    Task.start(fn ->
+      fetchers = [
+        {:user, fn -> Schemas.user_schema(client) end},
+        {:group, fn -> Schemas.group_schema(client) end},
+        {:enterprise, fn -> Schemas.enterprise_user_schema(client) end}
+      ]
+
+      results =
+        fetchers
+        |> Enum.reduce(%{}, fn {_key, fetch_fn}, acc ->
+          try do
+            case fetch_fn.() do
+              {:ok, schema} ->
+                schema_id = Map.get(schema, "id")
+                if schema_id, do: Map.put(acc, schema_id, schema), else: acc
+
+              {:error, _} ->
+                acc
+            end
+          rescue
+            _ -> acc
+          catch
+            :exit, _ -> acc
+          end
+        end)
+
+      if map_size(results) > 0 do
+        send(live_view_pid, {:schemas_fetched, {:ok, results}})
+      else
+        send(live_view_pid, {:schemas_fetched, {:error, :no_schemas}})
+      end
+    end)
+
+    assign(socket, schemas_loading: true)
   end
 
   defp create_scim_client("", _bearer_token), do: {"", nil}
@@ -817,9 +976,12 @@ defmodule ClientWeb.ScimClientDemoLive do
     end
   end
 
-  defp default_attr("Users"), do: "userName"
-  defp default_attr("Groups"), do: "displayName"
-  defp default_attr(_), do: "userName"
+  defp default_attr(resource_type, schemas, enabled_schemas) do
+    case attribute_options(resource_type, schemas, enabled_schemas) do
+      [{_group, [{value, _label} | _]} | _] -> value
+      _ -> if resource_type == "Groups", do: "displayName", else: "userName"
+    end
+  end
 
   defp maybe_put_param(row, params, param_key, row_key) do
     case Map.fetch(params, param_key) do

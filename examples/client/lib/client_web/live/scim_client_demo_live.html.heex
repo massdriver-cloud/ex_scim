@@ -380,6 +380,35 @@
                   </select>
                 </div>
 
+                <%= if @search_resource_type == "Users" do %>
+                  <div class="flex items-center gap-3 mb-2">
+                    <%= if @schemas_loading do %>
+                      <span class="loading loading-spinner loading-xs opacity-50"></span>
+                      <span class="text-xs opacity-50">Loading schemas...</span>
+                    <% else %>
+                      <%= if @schemas && Map.has_key?(@schemas, enterprise_user_schema_id()) do %>
+                        <label class="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            class="checkbox checkbox-xs checkbox-primary"
+                            checked={MapSet.member?(@enabled_schemas, enterprise_user_schema_id())}
+                            phx-click="toggle_schema"
+                            phx-value-schema-id={enterprise_user_schema_id()}
+                          />
+                          <span class="text-xs">Enterprise User</span>
+                        </label>
+                      <% end %>
+
+                      <%= if is_nil(@schemas) && match?({:ok, _}, @capabilities) do %>
+                        <div class="flex items-center gap-1">
+                          <.icon name="hero-exclamation-triangle" class="size-3 text-warning" />
+                          <span class="text-xs text-warning">Schema fetch failed — using defaults</span>
+                        </div>
+                      <% end %>
+                    <% end %>
+                  </div>
+                <% end %>
+
                 <%= if is_nil(@client) do %>
                   <div class="text-center py-12 opacity-50">
                     <.icon
@@ -420,10 +449,14 @@
                             name="attribute"
                             class="select select-bordered select-sm flex-1"
                           >
-                            <%= for {value, label} <- attribute_options(@search_resource_type) do %>
-                              <option value={value} selected={row.attribute == value}>
-                                {label}
-                              </option>
+                            <%= for {group_label, attrs} <- attribute_options(@search_resource_type, @schemas, @enabled_schemas) do %>
+                              <optgroup label={group_label}>
+                                <%= for {value, label} <- attrs do %>
+                                  <option value={value} selected={row.attribute == value}>
+                                    {label}
+                                  </option>
+                                <% end %>
+                              </optgroup>
                             <% end %>
                           </select>
 
