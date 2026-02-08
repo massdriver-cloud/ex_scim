@@ -70,7 +70,14 @@ config :ex_scim,
   scim_schema_repository: ExScim.Schema.Repository.DefaultRepository,
   storage_strategy: ExScimEcto.StorageAdapter,
   storage_repo: Provider.Repo,
-  user_model: Provider.Accounts.User,
+  user_model:
+    {Provider.Accounts.User,
+     filter_mapping: %{
+       "emails.value" => :email,
+       "name.givenName" => :given_name,
+       "name.familyName" => :family_name,
+       "name.formatted" => :display_name
+     }},
   group_model: Provider.Accounts.Group,
   bulk_supported: true,
   bulk_max_operations: 1000,

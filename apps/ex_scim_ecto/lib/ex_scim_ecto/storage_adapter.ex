@@ -22,26 +22,41 @@ defmodule ExScimEcto.StorageAdapter do
         user_model: {MyApp.Accounts.User, lookup_key: :resource_id},
         group_model: {MyApp.Groups.Group, preload: [:members], lookup_key: :uuid}
 
+  To map SCIM complex attribute paths to DB columns:
+
+      config :ex_scim,
+        user_model: {MyApp.Accounts.User,
+          filter_mapping: %{
+            "emails.value" => :email,
+            "name.givenName" => :given_name
+          }}
+
   See also `ExScim.Resources.Resource`.
   """
 
   @behaviour ExScim.Storage.Adapter
 
   import Ecto.Query
+  require Logger
 
   @impl true
   def get_user(id) do
-    {_schema, _associations, lookup_key} = user_schema()
+    {_schema, _associations, lookup_key, _filter_mapping} = user_schema()
     get_resource_by(&user_schema/0, lookup_key, id)
   end
 
   @impl true
   def list_users(filter_ast, sort_opts, pagination_opts) do
-    {user_schema, associations, _lookup_key} = user_schema()
+    {user_schema, associations, _lookup_key, filter_mapping} = user_schema()
+
+    filter_opts = [
+      filter_mapping: filter_mapping,
+      schema_fields: user_schema.__schema__(:fields)
+    ]
 
     query =
       from(u in user_schema)
-      |> ExScimEcto.QueryFilter.apply_filter(filter_ast)
+      |> ExScimEcto.QueryFilter.apply_filter(filter_ast, filter_opts)
       |> apply_sorting(sort_opts)
       |> apply_pagination(pagination_opts)
 
@@ -53,11 +68,22 @@ defmodule ExScimEcto.StorageAdapter do
     # Get total count for pagination
     count_query =
       from(u in user_schema)
-      |> ExScimEcto.QueryFilter.apply_filter(filter_ast)
+      |> ExScimEcto.QueryFilter.apply_filter(filter_ast, filter_opts)
 
     total = repo().aggregate(count_query, :count)
 
     {:ok, users, total}
+  rescue
+    e in ArgumentError ->
+      Logger.warning("Invalid SCIM filter: #{Exception.message(e)}")
+      {:error, {:invalid_filter, Exception.message(e)}}
+
+    e ->
+      Logger.error(
+        "Query execution failed: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+      )
+
+      {:error, :query_error}
   end
 
   @impl true
@@ -67,7 +93,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   def create_user(domain_user) when is_map(domain_user) do
     # Domain user struct is already validated by Users context
-    {user_schema, associations, _lookup_key} = user_schema()
+    {user_schema, associations, _lookup_key, _filter_mapping} = user_schema()
 
     changeset =
       user_schema.changeset(user_schema.__struct__(), domain_user)
@@ -79,7 +105,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def update_user(id, domain_user) do
-    {user_schema, associations, _lookup_key} = user_schema()
+    {user_schema, associations, _lookup_key, _filter_mapping} = user_schema()
 
     with {:ok, existing} <- get_user(id) do
       attrs =
@@ -98,7 +124,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def replace_user(id, domain_user) do
-    {user_schema, _preloads, _lookup_key} = user_schema()
+    {user_schema, _preloads, _lookup_key, _filter_mapping} = user_schema()
 
     with {:ok, existing} <- get_user(id) do
       changeset = user_schema.changeset(existing, Map.from_struct(domain_user))
@@ -122,24 +148,29 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def user_exists?(id) do
-    {user_schema, _preloads, lookup_key} = user_schema()
+    {user_schema, _preloads, lookup_key, _filter_mapping} = user_schema()
     repo().get_by(user_schema, [{lookup_key, id}]) != nil
   end
 
   # Group operations
   @impl true
   def get_group(id) do
-    {_schema, _associations, lookup_key} = group_schema()
+    {_schema, _associations, lookup_key, _filter_mapping} = group_schema()
     get_resource_by(&group_schema/0, lookup_key, id)
   end
 
   @impl true
   def list_groups(filter_ast, sort_opts, pagination_opts) do
-    {group_schema, associations, _lookup_key} = group_schema()
+    {group_schema, associations, _lookup_key, filter_mapping} = group_schema()
+
+    filter_opts = [
+      filter_mapping: filter_mapping,
+      schema_fields: group_schema.__schema__(:fields)
+    ]
 
     query =
       from(g in group_schema)
-      |> ExScimEcto.QueryFilter.apply_filter(filter_ast)
+      |> ExScimEcto.QueryFilter.apply_filter(filter_ast, filter_opts)
       |> apply_sorting(sort_opts)
       |> apply_pagination(pagination_opts)
 
@@ -151,11 +182,22 @@ defmodule ExScimEcto.StorageAdapter do
     # Get total count for pagination
     count_query =
       from(g in group_schema)
-      |> ExScimEcto.QueryFilter.apply_filter(filter_ast)
+      |> ExScimEcto.QueryFilter.apply_filter(filter_ast, filter_opts)
 
     total = repo().aggregate(count_query, :count)
 
     {:ok, groups, total}
+  rescue
+    e in ArgumentError ->
+      Logger.warning("Invalid SCIM filter: #{Exception.message(e)}")
+      {:error, {:invalid_filter, Exception.message(e)}}
+
+    e ->
+      Logger.error(
+        "Query execution failed: #{Exception.message(e)}\n#{Exception.format_stacktrace(__STACKTRACE__)}"
+      )
+
+      {:error, :query_error}
   end
 
   @impl true
@@ -164,7 +206,7 @@ defmodule ExScimEcto.StorageAdapter do
   end
 
   def create_group(domain_group) when is_map(domain_group) do
-    {group_schema, associations, _lookup_key} = group_schema()
+    {group_schema, associations, _lookup_key, _filter_mapping} = group_schema()
     changeset = group_schema.changeset(group_schema.__struct__(), domain_group)
 
     with {:ok, group} <- repo().insert(changeset) do
@@ -174,7 +216,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def update_group(id, domain_group) do
-    {group_schema, associations, _lookup_key} = group_schema()
+    {group_schema, associations, _lookup_key, _filter_mapping} = group_schema()
 
     with {:ok, existing} <- get_group(id) do
       attrs =
@@ -193,7 +235,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def replace_group(id, domain_group) do
-    {group_schema, _preloads, _lookup_key} = group_schema()
+    {group_schema, _preloads, _lookup_key, _filter_mapping} = group_schema()
 
     with {:ok, existing} <- get_group(id) do
       changeset = group_schema.changeset(existing, Map.from_struct(domain_group))
@@ -217,7 +259,7 @@ defmodule ExScimEcto.StorageAdapter do
 
   @impl true
   def group_exists?(id) do
-    {group_schema, _preloads, lookup_key} = group_schema()
+    {group_schema, _preloads, lookup_key, _filter_mapping} = group_schema()
     repo().get_by(group_schema, [{lookup_key, id}]) != nil
   end
 
@@ -232,10 +274,13 @@ defmodule ExScimEcto.StorageAdapter do
   defp parse_model_config(config_key) do
     case Application.get_env(:ex_scim, config_key) do
       {model, opts} ->
-        {model, Keyword.get(opts, :preload, []), Keyword.get(opts, :lookup_key, :id)}
+        {model,
+         Keyword.get(opts, :preload, []),
+         Keyword.get(opts, :lookup_key, :id),
+         Keyword.get(opts, :filter_mapping, %{})}
 
       model when not is_nil(model) ->
-        {model, [], :id}
+        {model, [], :id, %{}}
 
       nil ->
         raise ArgumentError, "Missing configuration for #{inspect(config_key)}"
@@ -247,7 +292,7 @@ defmodule ExScimEcto.StorageAdapter do
   defp maybe_preload(records, repo, preloads), do: repo.preload(records, preloads)
 
   defp get_resource_by(schema_opts_fn, field, value) do
-    {resource_schema, associations, _lookup_key} = schema_opts_fn.()
+    {resource_schema, associations, _lookup_key, _filter_mapping} = schema_opts_fn.()
 
     resource_schema
     |> repo().get_by([{field, value}])

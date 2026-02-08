@@ -127,5 +127,37 @@ defmodule ProviderWeb.ScimFilterTest do
 
       assert body["detail"] =~ "Invalid"
     end
+
+    test "mapped complex attribute path works", %{conn: conn} do
+      conn = get(conn, ~s|/scim/v2/Users?filter=emails.value co "alice@"|)
+      body = json_response(conn, 200)
+
+      assert body["totalResults"] == 1
+      assert [user] = body["Resources"]
+      assert user["userName"] == "alice"
+    end
+
+    test "unmapped complex attribute returns 400", %{conn: conn} do
+      conn = get(conn, ~s|/scim/v2/Users?filter=emails.type eq "work"|)
+      body = json_response(conn, 400)
+
+      assert body["detail"] =~ "Unsupported filter attribute"
+    end
+
+    test "completely unknown attribute returns 400", %{conn: conn} do
+      conn = get(conn, ~s|/scim/v2/Users?filter=nonExistent eq "x"|)
+      body = json_response(conn, 400)
+
+      assert body["detail"] =~ "Unknown filter attribute"
+    end
+
+    test "name.givenName mapped filter works", %{conn: conn} do
+      conn = get(conn, ~s|/scim/v2/Users?filter=name.givenName eq "Alice"|)
+      body = json_response(conn, 200)
+
+      assert body["totalResults"] == 1
+      assert [user] = body["Resources"]
+      assert user["userName"] == "alice"
+    end
   end
 end

@@ -41,6 +41,12 @@ defmodule ExScimPhoenix.Controller.UserController do
 
       json(conn, response)
     else
+      {:error, {:invalid_filter, message}} ->
+        send_scim_error(conn, :bad_request, :invalid_filter, message)
+
+      {:error, :query_error} ->
+        send_scim_error(conn, :internal_server_error, :internal_error, "Internal server error")
+
       {:error, :mapping_error} ->
         send_scim_error(conn, :internal_server_error, :internal_error, "Error mapping user data")
 
